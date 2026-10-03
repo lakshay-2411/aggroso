@@ -89,6 +89,84 @@ export type ControlEvidenceRow = {
   created_at: string;
 };
 
+export type AssessmentStatus =
+  | "draft"
+  | "analyzing"
+  | "in_review"
+  | "completed"
+  | "failed";
+export type ChangeType = "added" | "modified" | "removed";
+export type ImpactLevel = "confirmed" | "possible";
+export type ReviewStatus = "pending" | "accepted" | "rejected" | "corrected";
+
+export type AssessmentRow = {
+  id: string;
+  policy_id: string;
+  from_version_id: string;
+  to_version_id: string;
+  assessment_version: number;
+  supersedes_id: string | null;
+  status: AssessmentStatus;
+  is_stale: boolean;
+  stale_reasons: Json;
+  control_snapshot: Json;
+  ai_model: string | null;
+  ai_summary: string | null;
+  ai_error: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  analyzed_at: string | null;
+  completed_at: string | null;
+};
+
+export type RequirementChangeRow = {
+  id: string;
+  assessment_id: string;
+  position: number;
+  change_type: ChangeType;
+  title: string;
+  summary: string;
+  old_section_ref: string | null;
+  old_text: string | null;
+  new_section_ref: string | null;
+  new_text: string | null;
+  rationale: string | null;
+  citation_verified: boolean;
+  created_at: string;
+};
+
+export type ImpactMappingRow = {
+  id: string;
+  assessment_id: string;
+  requirement_change_id: string;
+  control_id: string;
+  ai_impact_level: ImpactLevel;
+  ai_rationale: string;
+  evidence_outdated: boolean;
+  evidence_rationale: string | null;
+  suggested_remediation: string | null;
+  review_status: ReviewStatus;
+  final_impact_level: ImpactLevel | null;
+  reviewer_id: string | null;
+  reviewed_at: string | null;
+  reviewer_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContextQuestionRow = {
+  id: string;
+  assessment_id: string;
+  question: string;
+  why_needed: string | null;
+  related_control_ids: string[];
+  answer: string | null;
+  answered_by: string | null;
+  answered_at: string | null;
+  created_at: string;
+};
+
 /** Insert shape: generated and optional columns become optional. */
 type Insertable<
   Row,
@@ -178,6 +256,91 @@ export type Database = {
         Update: NoUpdate;
         Relationships: [];
       };
+      assessments: {
+        Row: AssessmentRow;
+        Insert: Insertable<
+          AssessmentRow,
+          "id" | "created_at" | "updated_at",
+          | "assessment_version"
+          | "supersedes_id"
+          | "status"
+          | "is_stale"
+          | "stale_reasons"
+          | "control_snapshot"
+          | "ai_model"
+          | "ai_summary"
+          | "ai_error"
+          | "created_by"
+          | "analyzed_at"
+          | "completed_at"
+        >;
+        Update: Partial<
+          Pick<
+            AssessmentRow,
+            | "status"
+            | "is_stale"
+            | "stale_reasons"
+            | "control_snapshot"
+            | "ai_model"
+            | "ai_summary"
+            | "ai_error"
+            | "analyzed_at"
+            | "completed_at"
+          >
+        >;
+        Relationships: [];
+      };
+      requirement_changes: {
+        Row: RequirementChangeRow;
+        Insert: Insertable<
+          RequirementChangeRow,
+          "id" | "created_at",
+          | "old_section_ref"
+          | "old_text"
+          | "new_section_ref"
+          | "new_text"
+          | "rationale"
+          | "citation_verified"
+        >;
+        Update: NoUpdate;
+        Relationships: [];
+      };
+      impact_mappings: {
+        Row: ImpactMappingRow;
+        Insert: Insertable<
+          ImpactMappingRow,
+          "id" | "created_at" | "updated_at",
+          | "evidence_outdated"
+          | "evidence_rationale"
+          | "suggested_remediation"
+          | "review_status"
+          | "final_impact_level"
+          | "reviewer_id"
+          | "reviewed_at"
+          | "reviewer_note"
+        >;
+        Update: Partial<
+          Pick<
+            ImpactMappingRow,
+            | "review_status"
+            | "final_impact_level"
+            | "reviewer_id"
+            | "reviewed_at"
+            | "reviewer_note"
+          >
+        >;
+        Relationships: [];
+      };
+      context_questions: {
+        Row: ContextQuestionRow;
+        Insert: Insertable<
+          ContextQuestionRow,
+          "id" | "created_at",
+          "why_needed" | "related_control_ids" | "answer" | "answered_by" | "answered_at"
+        >;
+        Update: Partial<Pick<ContextQuestionRow, "answer" | "answered_by" | "answered_at">>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -188,6 +351,10 @@ export type Database = {
     };
     Enums: {
       remediation_status: RemediationStatus;
+      assessment_status: AssessmentStatus;
+      change_type: ChangeType;
+      impact_level: ImpactLevel;
+      review_status: ReviewStatus;
     };
     CompositeTypes: Record<string, never>;
   };

@@ -11,7 +11,7 @@ The tool assesses only against the supplied policy and never claims formal compl
 - Next.js (App Router, TypeScript, Turbopack)
 - Tailwind CSS + shadcn/ui
 - Supabase (Postgres + Auth)
-- Google Gemini for the AI agent
+- Groq (OpenAI-compatible API, free tier) for the AI agent
 
 ## Getting started
 

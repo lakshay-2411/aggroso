@@ -26,10 +26,14 @@ export const serverEnv = {
   get supabaseSecretKey() {
     return required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);
   },
-  get geminiApiKey() {
-    return required("GEMINI_API_KEY", process.env.GEMINI_API_KEY);
+  get groqApiKey() {
+    return required("GROQ_API_KEY", process.env.GROQ_API_KEY);
   },
-  get geminiModel() {
-    return required("GEMINI_MODEL", process.env.GEMINI_MODEL);
+  get groqModel() {
+    return required("GROQ_MODEL", process.env.GROQ_MODEL);
+  },
+  /** Optional override of the Groq OpenAI-compatible base URL. */
+  get groqBaseUrl() {
+    return process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
   },
 };
