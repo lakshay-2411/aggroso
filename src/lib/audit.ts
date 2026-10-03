@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/database.types";
 
 export type AuditEntityType =
   | "auth"
@@ -19,7 +20,7 @@ export interface AuditEntry {
   entityType: AuditEntityType;
   entityId: string;
   action: string;
-  details?: Record<string, unknown>;
+  details?: { [key: string]: Json | undefined };
 }
 
 /**
