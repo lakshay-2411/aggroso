@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AssessmentStatusBadge, StaleBadge } from "@/components/assessments/badges";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -84,7 +85,8 @@ export default async function AssessmentsPage() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       <AssessmentStatusBadge status={a.status} />
-                      {a.is_stale ? <StaleBadge /> : null}
+                      {a.is_stale && !a.superseded_by_id ? <StaleBadge /> : null}
+                      {a.superseded_by_id ? <Badge variant="outline">Superseded</Badge> : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{a.change_count}</TableCell>

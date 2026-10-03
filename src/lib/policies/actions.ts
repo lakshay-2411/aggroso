@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
+import { refreshStaleness } from "@/lib/assessments/staleness";
 import { recordAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -198,8 +199,12 @@ export async function addPolicyVersion(
     },
   });
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
+
   revalidatePath("/policies");
   revalidatePath(`/policies/${input.policyId}`, "page");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
   redirect(`/policies/${input.policyId}/versions/${version.id}`);
 }
 

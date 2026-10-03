@@ -10,11 +10,13 @@ import { QuestionsPanel } from "@/components/assessments/questions-panel";
 import { ReviewControls } from "@/components/assessments/review-controls";
 import { ResolutionPanel } from "@/components/remediation/resolution-panel";
 import { RunAnalysisButton } from "@/components/assessments/run-analysis-button";
+import { StaleAlert } from "@/components/assessments/stale-alert";
 import {
   CompleteAssessmentButton,
   ReopenAssessmentButton,
 } from "@/components/assessments/status-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -28,6 +30,11 @@ import {
   snapshotControlIds,
 } from "@/lib/assessments/metrics";
 import { getAssessment, listActiveControlOptions } from "@/lib/assessments/queries";
+import {
+  computeStaleness,
+  describeStaleReason,
+  loadStalenessContext,
+} from "@/lib/assessments/staleness";
 import { formatDateTime } from "@/lib/format";
 
 type Props = PageProps<"/assessments/[assessmentId]">;
@@ -40,11 +47,26 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 
 export default async function AssessmentPage(props: Props) {
   const { assessmentId } = await props.params;
-  const [assessment, controlOptions] = await Promise.all([
+  const [assessment, controlOptions, stalenessContext] = await Promise.all([
     getAssessment(assessmentId),
     listActiveControlOptions(),
+    loadStalenessContext(),
   ]);
   if (!assessment) notFound();
+
+  // Staleness is computed live from the current policy versions and control
+  // revisions, so the page never shows an outdated flag.
+  const staleReasons = assessment.superseded_by_id
+    ? []
+    : computeStaleness(assessment, stalenessContext);
+  const isStale = staleReasons.length > 0;
+  const latestVersion = stalenessContext.latestVersions.get(assessment.policy_id) ?? null;
+  const fromOptions = [
+    { id: assessment.from_version.id, label: `#${assessment.from_version.version_number} ${assessment.from_version.label} (original baseline)` },
+    ...(assessment.to_version.id !== latestVersion?.id
+      ? [{ id: assessment.to_version.id, label: `#${assessment.to_version.version_number} ${assessment.to_version.label} (last assessed)` }]
+      : []),
+  ];
 
   const metrics = computeAssessmentMetrics({
     snapshotControlIds: snapshotControlIds(assessment.control_snapshot),
@@ -87,9 +109,10 @@ export default async function AssessmentPage(props: Props) {
     label: `C${c.position + 1} · ${c.title}`,
   }));
 
-  const isInReview = assessment.status === "in_review";
-  // Remediation continues after the review is completed.
-  const canRemediate = isInReview || assessment.status === "completed";
+  const isSuperseded = Boolean(assessment.superseded_by_id);
+  const isInReview = assessment.status === "in_review" && !isSuperseded;
+  // Remediation continues after the review is completed, unless superseded.
+  const canRemediate = !isSuperseded && (assessment.status === "in_review" || assessment.status === "completed");
   const hasResults = assessment.status !== "draft" && assessment.status !== "analyzing";
   const canRun =
     assessment.status === "draft" ||
@@ -111,7 +134,8 @@ export default async function AssessmentPage(props: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{assessment.policy.title}</h1>
             <AssessmentStatusBadge status={assessment.status} />
-            {assessment.is_stale ? <StaleBadge /> : null}
+            {isStale ? <StaleBadge /> : null}
+            {assessment.superseded_by_id ? <Badge variant="outline">Superseded</Badge> : null}
           </div>
           <p className="text-sm text-muted-foreground">
             Assessment v{assessment.assessment_version} ·{" "}
@@ -124,6 +148,14 @@ export default async function AssessmentPage(props: Props) {
             </Link>
             {assessment.analyzed_at ? ` · Analyzed ${formatDateTime(assessment.analyzed_at)}` : null}
             {assessment.completed_at ? ` · Completed ${formatDateTime(assessment.completed_at)}` : null}
+            {assessment.supersedes_id ? (
+              <>
+                {" · "}
+                <Link href={`/assessments/${assessment.supersedes_id}`} className="underline-offset-4 hover:underline">
+                  Re-evaluation of an earlier version
+                </Link>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -141,6 +173,30 @@ export default async function AssessmentPage(props: Props) {
           ) : null}
         </div>
       </div>
+
+      {assessment.superseded_by_id ? (
+        <Alert>
+          <AlertTitle>Superseded</AlertTitle>
+          <AlertDescription>
+            This version was re-evaluated.{" "}
+            <Link href={`/assessments/${assessment.superseded_by_id}`} className="underline underline-offset-4">
+              Open the current assessment
+            </Link>
+            . This page is kept read-only as history.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {isStale ? (
+        <StaleAlert
+          assessmentId={assessment.id}
+          reasons={staleReasons.map(describeStaleReason)}
+          fromOptions={fromOptions}
+          defaultFromId={assessment.from_version.id}
+          latestLabel={latestVersion ? `#${latestVersion.version_number} ${latestVersion.label}` : "latest"}
+          canReevaluate={hasResults && !assessment.superseded_by_id}
+        />
+      ) : null}
 
       {assessment.status === "failed" && assessment.ai_error ? (
         <Alert variant="destructive">

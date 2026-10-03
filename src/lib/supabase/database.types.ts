@@ -107,6 +107,7 @@ export type AssessmentRow = {
   to_version_id: string;
   assessment_version: number;
   supersedes_id: string | null;
+  superseded_by_id: string | null;
   status: AssessmentStatus;
   is_stale: boolean;
   stale_reasons: Json;
@@ -299,6 +300,7 @@ export type Database = {
           "id" | "created_at" | "updated_at",
           | "assessment_version"
           | "supersedes_id"
+          | "superseded_by_id"
           | "status"
           | "is_stale"
           | "stale_reasons"
@@ -314,6 +316,7 @@ export type Database = {
           Pick<
             AssessmentRow,
             | "status"
+            | "superseded_by_id"
             | "is_stale"
             | "stale_reasons"
             | "control_snapshot"
@@ -411,6 +414,10 @@ export type Database = {
       next_policy_version_number: {
         Args: { p_policy_id: string };
         Returns: number;
+      };
+      move_mapping_dependents: {
+        Args: { p_from_mapping: string; p_to_mapping: string; p_to_assessment: string };
+        Returns: Json;
       };
     };
     Enums: {

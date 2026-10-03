@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
+import { refreshStaleness } from "@/lib/assessments/staleness";
 import { recordAudit } from "@/lib/audit";
 import {
   CONTROL_CSV_COLUMNS,
@@ -192,8 +193,11 @@ export async function updateControl(
     });
   }
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
   revalidatePath("/controls");
   revalidatePath(`/controls/${input.controlId}`, "page");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
   return { error: null, success: "Control saved." };
 }
 
@@ -223,8 +227,11 @@ export async function setControlActive(formData: FormData): Promise<void> {
     action: isActive ? "reactivated" : "deactivated",
   });
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
   revalidatePath("/controls");
   revalidatePath(`/controls/${parsed.data.controlId}`, "page");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
 }
 
 export async function addEvidence(
@@ -272,8 +279,11 @@ export async function addEvidence(
     },
   });
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
   revalidatePath("/controls");
   revalidatePath(`/controls/${input.controlId}`, "page");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
   return { error: null, success: "Evidence added." };
 }
 
@@ -310,8 +320,11 @@ export async function removeEvidence(formData: FormData): Promise<void> {
     details: { control_id: parsed.data.controlId, ...(existing ?? {}) },
   });
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
   revalidatePath("/controls");
   revalidatePath(`/controls/${parsed.data.controlId}`, "page");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +500,10 @@ export async function importControlsCsv(
     }
   }
 
+  await refreshStaleness({ id: user.id, email: user.email ?? null });
   revalidatePath("/controls");
+  revalidatePath("/assessments");
+  revalidatePath("/dashboard");
   result.success = `Import finished: ${result.created} created, ${result.updated} updated, ${result.evidenceAdded} evidence rows added, ${result.skipped.length} skipped.`;
   return result;
 }

@@ -289,6 +289,7 @@ export async function listDashboardAssessments(): Promise<DashboardAssessment[]>
       .from("assessments")
       .select("id, policy_id, from_version_id, to_version_id, status, is_stale, analyzed_at, control_snapshot")
       .in("status", ["in_review", "completed"])
+      .is("superseded_by_id", null)
       .order("created_at", { ascending: false }),
     supabase.from("policies").select("id, title"),
     supabase.from("policy_versions").select("id, label"),
