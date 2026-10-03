@@ -8,7 +8,9 @@ import type {
   PolicyRow,
   PolicyVersionRow,
   ProfileRow,
+  RemediationActionRow,
   RequirementChangeRow,
+  RiskAcceptanceRow,
 } from "@/lib/supabase/database.types";
 
 export type VersionRef = Pick<
@@ -42,6 +44,8 @@ export interface AssessmentDetail extends AssessmentRow {
   changes: RequirementChangeRow[];
   mappings: MappingWithControl[];
   questions: ContextQuestionRow[];
+  actions: RemediationActionRow[];
+  risk_acceptances: RiskAcceptanceRow[];
   profiles: Map<string, Pick<ProfileRow, "id" | "email" | "full_name">>;
 }
 
@@ -108,8 +112,16 @@ export async function getAssessment(assessmentId: string): Promise<AssessmentDet
   if (error) throw new Error(`Failed to load assessment: ${error.message}`);
   if (!assessment) return null;
 
-  const [policyRes, versionsRes, changesRes, mappingsRes, questionsRes, profilesRes] =
-    await Promise.all([
+  const [
+    policyRes,
+    versionsRes,
+    changesRes,
+    mappingsRes,
+    questionsRes,
+    profilesRes,
+    actionsRes,
+    acceptancesRes,
+  ] = await Promise.all([
       supabase.from("policies").select("id, title").eq("id", assessment.policy_id).single(),
       supabase
         .from("policy_versions")
@@ -131,9 +143,28 @@ export async function getAssessment(assessmentId: string): Promise<AssessmentDet
         .eq("assessment_id", assessmentId)
         .order("created_at", { ascending: true }),
       supabase.from("profiles").select("id, email, full_name"),
+      supabase
+        .from("remediation_actions")
+        .select("*")
+        .eq("assessment_id", assessmentId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("risk_acceptances")
+        .select("*")
+        .eq("assessment_id", assessmentId)
+        .order("created_at", { ascending: true }),
     ]);
 
-  for (const res of [policyRes, versionsRes, changesRes, mappingsRes, questionsRes, profilesRes]) {
+  for (const res of [
+    policyRes,
+    versionsRes,
+    changesRes,
+    mappingsRes,
+    questionsRes,
+    profilesRes,
+    actionsRes,
+    acceptancesRes,
+  ]) {
     if (res.error) throw new Error(`Failed to load assessment: ${res.error.message}`);
   }
 
@@ -174,6 +205,8 @@ export async function getAssessment(assessmentId: string): Promise<AssessmentDet
     changes: changesRes.data ?? [],
     mappings,
     questions: questionsRes.data ?? [],
+    actions: actionsRes.data ?? [],
+    risk_acceptances: acceptancesRes.data ?? [],
     profiles,
   };
 }
@@ -242,13 +275,16 @@ export interface DashboardAssessment {
       final_impact_level: ImpactMappingRow["final_impact_level"];
       no_action_required: boolean;
     }[];
+    actions: { impact_mapping_id: string | null; status: RemediationActionRow["status"] }[];
+    riskAcceptances: { impact_mapping_id: string | null; revoked_at: string | null }[];
   };
 }
 
 /** Everything the dashboard needs to compute metrics deterministically. */
 export async function listDashboardAssessments(): Promise<DashboardAssessment[]> {
   const supabase = await createClient();
-  const [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes] = await Promise.all([
+  const [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes, actionsRes, acceptancesRes] =
+    await Promise.all([
     supabase
       .from("assessments")
       .select("id, policy_id, from_version_id, to_version_id, status, is_stale, analyzed_at, control_snapshot")
@@ -262,9 +298,23 @@ export async function listDashboardAssessments(): Promise<DashboardAssessment[]>
       .select(
         "id, assessment_id, control_id, requirement_change_id, review_status, ai_impact_level, final_impact_level, no_action_required",
       ),
+    supabase.from("remediation_actions").select("assessment_id, impact_mapping_id, status"),
+    supabase.from("risk_acceptances").select("assessment_id, impact_mapping_id, revoked_at"),
   ]);
-  for (const res of [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes]) {
+  for (const res of [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes, actionsRes, acceptancesRes]) {
     if (res.error) throw new Error(`Failed to load dashboard: ${res.error.message}`);
+  }
+  const actionsByAssessment = new Map<string, DashboardAssessment["metricsInput"]["actions"]>();
+  for (const a of actionsRes.data ?? []) {
+    const list = actionsByAssessment.get(a.assessment_id) ?? [];
+    list.push({ impact_mapping_id: a.impact_mapping_id, status: a.status });
+    actionsByAssessment.set(a.assessment_id, list);
+  }
+  const acceptancesByAssessment = new Map<string, DashboardAssessment["metricsInput"]["riskAcceptances"]>();
+  for (const r of acceptancesRes.data ?? []) {
+    const list = acceptancesByAssessment.get(r.assessment_id) ?? [];
+    list.push({ impact_mapping_id: r.impact_mapping_id, revoked_at: r.revoked_at });
+    acceptancesByAssessment.set(r.assessment_id, list);
   }
 
   const policies = new Map((policiesRes.data ?? []).map((p) => [p.id, p.title]));
@@ -300,7 +350,50 @@ export async function listDashboardAssessments(): Promise<DashboardAssessment[]>
         snapshotControlIds,
         changeIds: changesByAssessment.get(a.id) ?? [],
         mappings: mappingsByAssessment.get(a.id) ?? [],
+        actions: actionsByAssessment.get(a.id) ?? [],
+        riskAcceptances: acceptancesByAssessment.get(a.id) ?? [],
       },
+    };
+  });
+}
+
+export interface ActionListItem extends RemediationActionRow {
+  policy_title: string;
+  control_ref: string;
+  control_title: string;
+  owner_label: string;
+}
+
+/** Every remediation action across assessments, for the actions page. */
+export async function listRemediationActions(): Promise<ActionListItem[]> {
+  const supabase = await createClient();
+  const [actionsRes, assessmentsRes, policiesRes, controlsRes, profilesRes] = await Promise.all([
+    supabase.from("remediation_actions").select("*").order("created_at", { ascending: false }),
+    supabase.from("assessments").select("id, policy_id"),
+    supabase.from("policies").select("id, title"),
+    supabase.from("controls").select("id, control_ref, title"),
+    supabase.from("profiles").select("id, email, full_name"),
+  ]);
+  for (const res of [actionsRes, assessmentsRes, policiesRes, controlsRes, profilesRes]) {
+    if (res.error) throw new Error(`Failed to load actions: ${res.error.message}`);
+  }
+  const policyByAssessment = new Map<string, string>();
+  const policyTitles = new Map((policiesRes.data ?? []).map((p) => [p.id, p.title]));
+  for (const a of assessmentsRes.data ?? []) {
+    policyByAssessment.set(a.id, policyTitles.get(a.policy_id) ?? "Unknown policy");
+  }
+  const controls = new Map((controlsRes.data ?? []).map((c) => [c.id, c]));
+  const profiles = new Map(
+    (profilesRes.data ?? []).map((p) => [p.id, p.full_name ?? p.email]),
+  );
+  return (actionsRes.data ?? []).map((a) => {
+    const control = controls.get(a.control_id);
+    return {
+      ...a,
+      policy_title: policyByAssessment.get(a.assessment_id) ?? "Unknown policy",
+      control_ref: control?.control_ref ?? "?",
+      control_title: control?.title ?? "Unknown control",
+      owner_label: (a.owner_id ? profiles.get(a.owner_id) : null) ?? a.owner_name ?? "Unassigned",
     };
   });
 }

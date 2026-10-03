@@ -8,6 +8,7 @@ import { MappingsList } from "@/components/assessments/mappings-list";
 import { MetricsGrid, SecondaryMetrics } from "@/components/assessments/metrics-grid";
 import { QuestionsPanel } from "@/components/assessments/questions-panel";
 import { ReviewControls } from "@/components/assessments/review-controls";
+import { ResolutionPanel } from "@/components/remediation/resolution-panel";
 import { RunAnalysisButton } from "@/components/assessments/run-analysis-button";
 import {
   CompleteAssessmentButton,
@@ -21,7 +22,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { computeAssessmentMetrics, snapshotControlIds } from "@/lib/assessments/metrics";
+import {
+  computeAssessmentMetrics,
+  isEffective,
+  snapshotControlIds,
+} from "@/lib/assessments/metrics";
 import { getAssessment, listActiveControlOptions } from "@/lib/assessments/queries";
 import { formatDateTime } from "@/lib/format";
 
@@ -45,7 +50,26 @@ export default async function AssessmentPage(props: Props) {
     snapshotControlIds: snapshotControlIds(assessment.control_snapshot),
     changeIds: assessment.changes.map((c) => c.id),
     mappings: assessment.mappings,
+    actions: assessment.actions,
+    riskAcceptances: assessment.risk_acceptances,
   });
+
+  const ownerChoices = [...assessment.profiles.values()].map((p) => ({
+    id: p.id,
+    label: p.full_name ? `${p.full_name} (${p.email})` : p.email,
+  }));
+  const actionsByMapping = new Map<string, typeof assessment.actions>();
+  for (const a of assessment.actions) {
+    const list = actionsByMapping.get(a.impact_mapping_id) ?? [];
+    list.push(a);
+    actionsByMapping.set(a.impact_mapping_id, list);
+  }
+  const acceptancesByMapping = new Map<string, typeof assessment.risk_acceptances>();
+  for (const r of assessment.risk_acceptances) {
+    const list = acceptancesByMapping.get(r.impact_mapping_id) ?? [];
+    list.push(r);
+    acceptancesByMapping.set(r.impact_mapping_id, list);
+  }
 
   const mappedChangeIds = new Set(
     assessment.mappings
@@ -64,6 +88,8 @@ export default async function AssessmentPage(props: Props) {
   }));
 
   const isInReview = assessment.status === "in_review";
+  // Remediation continues after the review is completed.
+  const canRemediate = isInReview || assessment.status === "completed";
   const hasResults = assessment.status !== "draft" && assessment.status !== "analyzing";
   const canRun =
     assessment.status === "draft" ||
@@ -149,7 +175,8 @@ export default async function AssessmentPage(props: Props) {
             <p className="text-sm text-muted-foreground">
               Computed from reviewer decisions only. Pending and rejected
               mappings do not count. A mapped control is compliant when every
-              accepted impact on it is resolved.
+              accepted impact on it is resolved: no action required, all
+              remediation actions done, or an active risk acceptance.
             </p>
           </div>
           <MetricsGrid metrics={metrics} />
@@ -211,6 +238,24 @@ export default async function AssessmentPage(props: Props) {
                       />
                     )
                   : undefined
+              }
+              renderResolution={(m) =>
+                isEffective(m.review_status) ? (
+                  <ResolutionPanel
+                    assessmentId={assessment.id}
+                    mappingId={m.id}
+                    suggestedRemediation={m.suggested_remediation}
+                    defaultOwnerId={m.control.owner_id}
+                    defaultOwnerName={m.control.owner_name}
+                    owners={ownerChoices}
+                    actions={actionsByMapping.get(m.id) ?? []}
+                    acceptances={acceptancesByMapping.get(m.id) ?? []}
+                    ownerNames={ownerNames}
+                    resolved={metrics.mappingResolved.get(m.id) === true}
+                    noActionRequired={m.no_action_required}
+                    editable={canRemediate}
+                  />
+                ) : null
               }
             />
           </section>

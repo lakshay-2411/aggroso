@@ -18,9 +18,17 @@ interface MappingsListProps {
   ownerNames: Map<string, string>;
   /** Optional per-mapping review controls, rendered under each mapping. */
   renderReview?: (mapping: MappingWithControl) => React.ReactNode;
+  /** Optional per-mapping remediation / risk acceptance block. */
+  renderResolution?: (mapping: MappingWithControl) => React.ReactNode;
 }
 
-export function MappingsList({ mappings, changes, ownerNames, renderReview }: MappingsListProps) {
+export function MappingsList({
+  mappings,
+  changes,
+  ownerNames,
+  renderReview,
+  renderResolution,
+}: MappingsListProps) {
   if (mappings.length === 0) {
     return (
       <Card>
@@ -125,6 +133,7 @@ export function MappingsList({ mappings, changes, ownerNames, renderReview }: Ma
                       </p>
                     ) : null}
                     {renderReview ? renderReview(m) : null}
+                    {renderResolution ? renderResolution(m) : null}
                   </div>
                 );
               })}

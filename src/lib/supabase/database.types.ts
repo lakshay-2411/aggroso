@@ -158,6 +158,39 @@ export type ImpactMappingRow = {
   updated_at: string;
 };
 
+export type ActionStatus = "open" | "in_progress" | "done" | "cancelled";
+
+export type RemediationActionRow = {
+  id: string;
+  assessment_id: string;
+  impact_mapping_id: string;
+  control_id: string;
+  title: string;
+  description: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
+  status: ActionStatus;
+  due_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type RiskAcceptanceRow = {
+  id: string;
+  assessment_id: string;
+  impact_mapping_id: string;
+  control_id: string;
+  reason: string;
+  review_date: string;
+  accepted_by: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_reason: string | null;
+};
+
 export type ContextQuestionRow = {
   id: string;
   assessment_id: string;
@@ -337,6 +370,31 @@ export type Database = {
         >;
         Relationships: [];
       };
+      remediation_actions: {
+        Row: RemediationActionRow;
+        Insert: Insertable<
+          RemediationActionRow,
+          "id" | "created_at" | "updated_at",
+          "description" | "owner_id" | "owner_name" | "status" | "due_date" | "created_by" | "completed_at"
+        >;
+        Update: Partial<
+          Pick<
+            RemediationActionRow,
+            "title" | "description" | "owner_id" | "owner_name" | "status" | "due_date" | "completed_at"
+          >
+        >;
+        Relationships: [];
+      };
+      risk_acceptances: {
+        Row: RiskAcceptanceRow;
+        Insert: Insertable<
+          RiskAcceptanceRow,
+          "id" | "created_at",
+          "accepted_by" | "revoked_at" | "revoked_by" | "revoke_reason"
+        >;
+        Update: Partial<Pick<RiskAcceptanceRow, "revoked_at" | "revoked_by" | "revoke_reason">>;
+        Relationships: [];
+      };
       context_questions: {
         Row: ContextQuestionRow;
         Insert: Insertable<
@@ -362,6 +420,7 @@ export type Database = {
       impact_level: ImpactLevel;
       review_status: ReviewStatus;
       mapping_source: MappingSource;
+      action_status: ActionStatus;
     };
     CompositeTypes: Record<string, never>;
   };
