@@ -209,3 +209,98 @@ export async function listPoliciesWithVersions(): Promise<
     .map((p) => ({ ...p, versions: byPolicy.get(p.id) ?? [] }))
     .filter((p) => p.versions.length >= 2);
 }
+
+/** Active controls as id + label, for reviewer-added mappings. */
+export async function listActiveControlOptions(): Promise<{ id: string; label: string }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("controls")
+    .select("id, control_ref, title")
+    .eq("is_active", true)
+    .order("control_ref");
+  if (error) throw new Error(`Failed to load controls: ${error.message}`);
+  return (data ?? []).map((c) => ({ id: c.id, label: `${c.control_ref} · ${c.title}` }));
+}
+
+export interface DashboardAssessment {
+  id: string;
+  policy_title: string;
+  from_label: string;
+  to_label: string;
+  status: AssessmentRow["status"];
+  is_stale: boolean;
+  analyzed_at: string | null;
+  metricsInput: {
+    snapshotControlIds: string[];
+    changeIds: string[];
+    mappings: {
+      id: string;
+      control_id: string;
+      requirement_change_id: string;
+      review_status: ImpactMappingRow["review_status"];
+      ai_impact_level: ImpactMappingRow["ai_impact_level"];
+      final_impact_level: ImpactMappingRow["final_impact_level"];
+      no_action_required: boolean;
+    }[];
+  };
+}
+
+/** Everything the dashboard needs to compute metrics deterministically. */
+export async function listDashboardAssessments(): Promise<DashboardAssessment[]> {
+  const supabase = await createClient();
+  const [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes] = await Promise.all([
+    supabase
+      .from("assessments")
+      .select("id, policy_id, from_version_id, to_version_id, status, is_stale, analyzed_at, control_snapshot")
+      .in("status", ["in_review", "completed"])
+      .order("created_at", { ascending: false }),
+    supabase.from("policies").select("id, title"),
+    supabase.from("policy_versions").select("id, label"),
+    supabase.from("requirement_changes").select("id, assessment_id"),
+    supabase
+      .from("impact_mappings")
+      .select(
+        "id, assessment_id, control_id, requirement_change_id, review_status, ai_impact_level, final_impact_level, no_action_required",
+      ),
+  ]);
+  for (const res of [assessmentsRes, policiesRes, versionsRes, changesRes, mappingsRes]) {
+    if (res.error) throw new Error(`Failed to load dashboard: ${res.error.message}`);
+  }
+
+  const policies = new Map((policiesRes.data ?? []).map((p) => [p.id, p.title]));
+  const versions = new Map((versionsRes.data ?? []).map((v) => [v.id, v.label]));
+  const changesByAssessment = new Map<string, string[]>();
+  for (const c of changesRes.data ?? []) {
+    const list = changesByAssessment.get(c.assessment_id) ?? [];
+    list.push(c.id);
+    changesByAssessment.set(c.assessment_id, list);
+  }
+  const mappingsByAssessment = new Map<string, DashboardAssessment["metricsInput"]["mappings"]>();
+  for (const m of mappingsRes.data ?? []) {
+    const list = mappingsByAssessment.get(m.assessment_id) ?? [];
+    list.push(m);
+    mappingsByAssessment.set(m.assessment_id, list);
+  }
+
+  return (assessmentsRes.data ?? []).map((a) => {
+    const snapshot = a.control_snapshot;
+    const snapshotControlIds =
+      snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+        ? Object.keys(snapshot as Record<string, unknown>)
+        : [];
+    return {
+      id: a.id,
+      policy_title: policies.get(a.policy_id) ?? "Unknown policy",
+      from_label: versions.get(a.from_version_id) ?? "?",
+      to_label: versions.get(a.to_version_id) ?? "?",
+      status: a.status,
+      is_stale: a.is_stale,
+      analyzed_at: a.analyzed_at,
+      metricsInput: {
+        snapshotControlIds,
+        changeIds: changesByAssessment.get(a.id) ?? [],
+        mappings: mappingsByAssessment.get(a.id) ?? [],
+      },
+    };
+  });
+}

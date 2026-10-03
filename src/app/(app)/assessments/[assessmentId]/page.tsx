@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AddMappingForm } from "@/components/assessments/add-mapping-form";
 import { AssessmentStatusBadge, StaleBadge } from "@/components/assessments/badges";
 import { ChangesList } from "@/components/assessments/changes-list";
 import { MappingsList } from "@/components/assessments/mappings-list";
+import { MetricsGrid, SecondaryMetrics } from "@/components/assessments/metrics-grid";
 import { QuestionsPanel } from "@/components/assessments/questions-panel";
+import { ReviewControls } from "@/components/assessments/review-controls";
 import { RunAnalysisButton } from "@/components/assessments/run-analysis-button";
+import {
+  CompleteAssessmentButton,
+  ReopenAssessmentButton,
+} from "@/components/assessments/status-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -14,7 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getAssessment } from "@/lib/assessments/queries";
+import { computeAssessmentMetrics, snapshotControlIds } from "@/lib/assessments/metrics";
+import { getAssessment, listActiveControlOptions } from "@/lib/assessments/queries";
 import { formatDateTime } from "@/lib/format";
 
 type Props = PageProps<"/assessments/[assessmentId]">;
@@ -27,29 +35,40 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 
 export default async function AssessmentPage(props: Props) {
   const { assessmentId } = await props.params;
-  const assessment = await getAssessment(assessmentId);
+  const [assessment, controlOptions] = await Promise.all([
+    getAssessment(assessmentId),
+    listActiveControlOptions(),
+  ]);
   if (!assessment) notFound();
 
-  const mappedChangeIds = new Set(assessment.mappings.map((m) => m.requirement_change_id));
+  const metrics = computeAssessmentMetrics({
+    snapshotControlIds: snapshotControlIds(assessment.control_snapshot),
+    changeIds: assessment.changes.map((c) => c.id),
+    mappings: assessment.mappings,
+  });
+
+  const mappedChangeIds = new Set(
+    assessment.mappings
+      .filter((m) => m.review_status !== "rejected")
+      .map((m) => m.requirement_change_id),
+  );
   const ownerNames = new Map(
     [...assessment.profiles.values()].map((p) => [p.id, p.full_name ?? p.email]),
   );
   const controlLabels = new Map(
     assessment.mappings.map((m) => [m.control_id, `${m.control.control_ref} ${m.control.title}`]),
   );
+  const changeOptions = assessment.changes.map((c) => ({
+    id: c.id,
+    label: `C${c.position + 1} · ${c.title}`,
+  }));
 
-  const confirmed = assessment.mappings.filter(
-    (m) => (m.final_impact_level ?? m.ai_impact_level) === "confirmed",
-  ).length;
-  const possible = assessment.mappings.length - confirmed;
-  const outdatedEvidence = assessment.mappings.filter((m) => m.evidence_outdated).length;
-  const unmappedChanges = assessment.changes.filter((c) => !mappedChangeIds.has(c.id)).length;
-  const openQuestions = assessment.questions.filter((q) => !q.answer).length;
+  const isInReview = assessment.status === "in_review";
+  const hasResults = assessment.status !== "draft" && assessment.status !== "analyzing";
   const canRun =
     assessment.status === "draft" ||
     assessment.status === "failed" ||
-    (assessment.status === "in_review" &&
-      assessment.mappings.every((m) => m.review_status === "pending"));
+    (isInReview && assessment.mappings.every((m) => m.review_status === "pending"));
 
   const versionLink = (id: string) => `/policies/${assessment.policy.id}/versions/${id}`;
 
@@ -78,15 +97,23 @@ export default async function AssessmentPage(props: Props) {
               #{assessment.to_version.version_number} {assessment.to_version.label}
             </Link>
             {assessment.analyzed_at ? ` · Analyzed ${formatDateTime(assessment.analyzed_at)}` : null}
-            {assessment.ai_model ? ` · ${assessment.ai_model}` : null}
+            {assessment.completed_at ? ` · Completed ${formatDateTime(assessment.completed_at)}` : null}
           </p>
         </div>
-        {canRun ? (
-          <RunAnalysisButton
-            assessmentId={assessment.id}
-            label={assessment.status === "draft" ? "Run analysis" : "Re-run analysis"}
-          />
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {canRun ? (
+            <RunAnalysisButton
+              assessmentId={assessment.id}
+              label={assessment.status === "draft" ? "Run analysis" : "Re-run analysis"}
+            />
+          ) : null}
+          {isInReview && assessment.mappings.length > 0 ? (
+            <CompleteAssessmentButton assessmentId={assessment.id} pendingCount={metrics.pending} />
+          ) : null}
+          {assessment.status === "completed" ? (
+            <ReopenAssessmentButton assessmentId={assessment.id} />
+          ) : null}
+        </div>
       </div>
 
       {assessment.status === "failed" && assessment.ai_error ? (
@@ -100,10 +127,10 @@ export default async function AssessmentPage(props: Props) {
         <Alert>
           <AlertTitle>Ready to analyze</AlertTitle>
           <AlertDescription>
-            Running the analysis sends both policy versions and the active control
-            register to the AI model. It extracts changed requirements with citations,
-            maps them to controls, flags evidence that may be outdated, and lists
-            any context it needs from you.
+            Running the analysis diffs the two policy versions, sends only the
+            differing paragraphs and the active control register to the AI
+            model, and returns changed requirements with citations, affected
+            controls, evidence flags, and any questions it needs answered.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -115,6 +142,21 @@ export default async function AssessmentPage(props: Props) {
         </Alert>
       ) : null}
 
+      {hasResults ? (
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Counts</h2>
+            <p className="text-sm text-muted-foreground">
+              Computed from reviewer decisions only. Pending and rejected
+              mappings do not count. A mapped control is compliant when every
+              accepted impact on it is resolved.
+            </p>
+          </div>
+          <MetricsGrid metrics={metrics} />
+          <SecondaryMetrics metrics={metrics} />
+        </section>
+      ) : null}
+
       {assessment.ai_summary ? (
         <Card>
           <CardHeader>
@@ -124,21 +166,13 @@ export default async function AssessmentPage(props: Props) {
               statement of formal compliance.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent>
             <p className="text-sm whitespace-pre-wrap">{assessment.ai_summary}</p>
-            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
-              <Stat label="Changes" value={assessment.changes.length} />
-              <Stat label="Unmapped changes" value={unmappedChanges} />
-              <Stat label="Confirmed impacts" value={confirmed} />
-              <Stat label="Possible impacts" value={possible} />
-              <Stat label="Outdated evidence" value={outdatedEvidence} />
-              <Stat label="Open questions" value={openQuestions} />
-            </dl>
           </CardContent>
         </Card>
       ) : null}
 
-      {assessment.status !== "draft" && assessment.status !== "analyzing" ? (
+      {hasResults ? (
         <>
           <section className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">Changed requirements</h2>
@@ -151,11 +185,33 @@ export default async function AssessmentPage(props: Props) {
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">Affected controls</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Affected controls</h2>
+              {isInReview ? (
+                <AddMappingForm
+                  assessmentId={assessment.id}
+                  changes={changeOptions}
+                  controls={controlOptions}
+                />
+              ) : null}
+            </div>
             <MappingsList
               mappings={assessment.mappings}
               changes={assessment.changes}
               ownerNames={ownerNames}
+              renderReview={
+                isInReview
+                  ? (m) => (
+                      <ReviewControls
+                        mappingId={m.id}
+                        assessmentId={assessment.id}
+                        reviewStatus={m.review_status}
+                        aiLevel={m.ai_impact_level}
+                        noActionRequired={m.no_action_required}
+                      />
+                    )
+                  : undefined
+              }
             />
           </section>
 
@@ -165,20 +221,11 @@ export default async function AssessmentPage(props: Props) {
               assessmentId={assessment.id}
               questions={assessment.questions}
               controlLabels={controlLabels}
-              readOnly={assessment.status === "completed"}
+              readOnly={!isInReview}
             />
           </section>
         </>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border p-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-xl font-semibold tabular-nums">{value}</dd>
     </div>
   );
 }

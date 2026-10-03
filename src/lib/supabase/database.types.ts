@@ -98,6 +98,7 @@ export type AssessmentStatus =
 export type ChangeType = "added" | "modified" | "removed";
 export type ImpactLevel = "confirmed" | "possible";
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "corrected";
+export type MappingSource = "agent" | "reviewer";
 
 export type AssessmentRow = {
   id: string;
@@ -151,6 +152,8 @@ export type ImpactMappingRow = {
   reviewer_id: string | null;
   reviewed_at: string | null;
   reviewer_note: string | null;
+  source: MappingSource;
+  no_action_required: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -318,6 +321,8 @@ export type Database = {
           | "reviewer_id"
           | "reviewed_at"
           | "reviewer_note"
+          | "source"
+          | "no_action_required"
         >;
         Update: Partial<
           Pick<
@@ -327,6 +332,7 @@ export type Database = {
             | "reviewer_id"
             | "reviewed_at"
             | "reviewer_note"
+            | "no_action_required"
           >
         >;
         Relationships: [];
@@ -355,6 +361,7 @@ export type Database = {
       change_type: ChangeType;
       impact_level: ImpactLevel;
       review_status: ReviewStatus;
+      mapping_source: MappingSource;
     };
     CompositeTypes: Record<string, never>;
   };
