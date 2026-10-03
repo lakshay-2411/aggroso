@@ -33,6 +33,19 @@ npm run build   # production build (also type-checks)
 npm run lint    # run ESLint
 ```
 
+## What it does
+
+1. **Policies** – keep every version of a policy; versions are immutable.
+2. **Control register** – controls with owners, evidence, and remediation status; CSV import.
+3. **Assessments** – a deterministic paragraph diff finds what changed, then the AI model extracts changed requirements with verbatim citations (verified against the stored text), maps them to controls as *confirmed* or *possible* impact, flags potentially outdated evidence, suggests remediation, and asks for missing context.
+4. **Review** – reviewers accept, reject, or correct each mapping, or add ones the agent missed. Counts (mapped, unmapped, compliant, unresolved) are computed from reviewer decisions only.
+5. **Remediation** – actions with an owner, status, and due date; formal risk acceptance with a reason and review date.
+6. **Staleness and re-evaluation** – assessments are flagged when the policy or a control changes; re-evaluation creates a new version and carries forward unaffected decisions.
+7. **Audit history** – an append-only log of every decision and change, viewable globally and per record.
+8. **Impact report** – a printable report (browser print to PDF) of the reviewed assessment.
+
+Environment variables are listed in `.env.example`.
+
 ## Database migrations
 
-SQL migrations live in `supabase/migrations`. Apply each numbered file in order using the Supabase dashboard SQL editor.
+SQL migrations live in `supabase/migrations`. Apply each numbered file in order (0001 to 0007) using the Supabase dashboard SQL editor.

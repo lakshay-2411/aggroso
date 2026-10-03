@@ -18,6 +18,7 @@ import {
 } from "@/components/assessments/status-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -162,6 +163,15 @@ export default async function AssessmentPage(props: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {hasResults ? (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`/assessments/${assessment.id}/report`} />}
+            >
+              View report
+            </Button>
+          ) : null}
           {canRun ? (
             <RunAnalysisButton
               assessmentId={assessment.id}

@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="border-b bg-background">
+      <header className="border-b bg-background print:hidden">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
           <Link href="/dashboard" className="font-semibold tracking-tight">
             Aggroso
@@ -31,10 +31,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 print:max-w-none print:px-0 print:py-0">
         {children}
       </main>
-      <footer className="border-t">
+      <footer className="border-t print:hidden">
         <p className="mx-auto w-full max-w-7xl px-4 py-4 text-xs text-muted-foreground sm:px-6">
           Assessments are made only against the policy you supply. Nothing in
           this tool constitutes formal compliance certification.
