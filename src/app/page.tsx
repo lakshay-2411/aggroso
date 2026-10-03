@@ -48,10 +48,15 @@ export default function HomePage() {
           supply and never constitute formal compliance certification.
         </p>
         <div className="flex gap-3">
-          <Button size="lg" render={<Link href="/login" />}>
+          <Button size="lg" nativeButton={false} render={<Link href="/login" />}>
             Sign in
           </Button>
-          <Button size="lg" variant="outline" render={<Link href="/signup" />}>
+          <Button
+            size="lg"
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/signup" />}
+          >
             Create account
           </Button>
         </div>
