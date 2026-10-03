@@ -54,6 +54,41 @@ export type PolicyVersionRow = {
   created_at: string;
 };
 
+export type RemediationStatus =
+  | "not_started"
+  | "in_progress"
+  | "remediated"
+  | "risk_accepted"
+  | "not_applicable";
+
+export type ControlRow = {
+  id: string;
+  control_ref: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
+  remediation_status: RemediationStatus;
+  remediation_notes: string | null;
+  is_active: boolean;
+  revision: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ControlEvidenceRow = {
+  id: string;
+  control_id: string;
+  title: string;
+  description: string | null;
+  evidence_date: string | null;
+  reference: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 /** Insert shape: generated and optional columns become optional. */
 type Insertable<
   Row,
@@ -103,6 +138,46 @@ export type Database = {
         Update: NoUpdate;
         Relationships: [];
       };
+      controls: {
+        Row: ControlRow;
+        Insert: Insertable<
+          ControlRow,
+          "id" | "revision" | "created_at" | "updated_at",
+          | "description"
+          | "category"
+          | "owner_id"
+          | "owner_name"
+          | "remediation_status"
+          | "remediation_notes"
+          | "is_active"
+          | "created_by"
+        >;
+        Update: Partial<
+          Pick<
+            ControlRow,
+            | "control_ref"
+            | "title"
+            | "description"
+            | "category"
+            | "owner_id"
+            | "owner_name"
+            | "remediation_status"
+            | "remediation_notes"
+            | "is_active"
+          >
+        >;
+        Relationships: [];
+      };
+      control_evidence: {
+        Row: ControlEvidenceRow;
+        Insert: Insertable<
+          ControlEvidenceRow,
+          "id" | "created_at",
+          "description" | "evidence_date" | "reference" | "created_by"
+        >;
+        Update: NoUpdate;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -111,7 +186,9 @@ export type Database = {
         Returns: number;
       };
     };
-    Enums: Record<string, never>;
+    Enums: {
+      remediation_status: RemediationStatus;
+    };
     CompositeTypes: Record<string, never>;
   };
 };
