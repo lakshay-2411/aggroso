@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ControlForm } from "@/components/controls/control-form";
 import { EvidenceSection } from "@/components/controls/evidence-section";
 import { RemediationStatusBadge } from "@/components/controls/status-badge";
+import { AuditTable } from "@/components/audit/audit-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { setControlActive } from "@/lib/controls/actions";
+import { listEntityHistory } from "@/lib/audit-log/queries";
 import { getControl, listOwners, ownerDisplayName } from "@/lib/controls/queries";
 import { formatDateTime } from "@/lib/format";
 
@@ -27,7 +29,11 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 
 export default async function ControlPage(props: Props) {
   const { controlId } = await props.params;
-  const [control, owners] = await Promise.all([getControl(controlId), listOwners()]);
+  const [control, owners, history] = await Promise.all([
+    getControl(controlId),
+    listOwners(),
+    listEntityHistory(controlId, "control_id"),
+  ]);
   if (!control) notFound();
 
   return (
@@ -78,6 +84,19 @@ export default async function ControlPage(props: Props) {
 
         <EvidenceSection controlId={control.id} evidence={control.evidence} />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>History</CardTitle>
+          <CardDescription>
+            Changes to this control and its evidence, and every assessment
+            decision, action, and risk acceptance that references it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <AuditTable entries={history} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

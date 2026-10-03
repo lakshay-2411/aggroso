@@ -11,6 +11,7 @@ import { ReviewControls } from "@/components/assessments/review-controls";
 import { ResolutionPanel } from "@/components/remediation/resolution-panel";
 import { RunAnalysisButton } from "@/components/assessments/run-analysis-button";
 import { StaleAlert } from "@/components/assessments/stale-alert";
+import { AuditTable } from "@/components/audit/audit-table";
 import {
   CompleteAssessmentButton,
   ReopenAssessmentButton,
@@ -30,6 +31,7 @@ import {
   snapshotControlIds,
 } from "@/lib/assessments/metrics";
 import { getAssessment, listActiveControlOptions } from "@/lib/assessments/queries";
+import { listEntityHistory } from "@/lib/audit-log/queries";
 import {
   computeStaleness,
   describeStaleReason,
@@ -47,10 +49,11 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 
 export default async function AssessmentPage(props: Props) {
   const { assessmentId } = await props.params;
-  const [assessment, controlOptions, stalenessContext] = await Promise.all([
+  const [assessment, controlOptions, stalenessContext, history] = await Promise.all([
     getAssessment(assessmentId),
     listActiveControlOptions(),
     loadStalenessContext(),
+    listEntityHistory(assessmentId, "assessment_id"),
   ]);
   if (!assessment) notFound();
 
@@ -327,6 +330,21 @@ export default async function AssessmentPage(props: Props) {
           </section>
         </>
       ) : null}
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Decision and change history</h2>
+          <p className="text-sm text-muted-foreground">
+            Everything recorded about this assessment and its mappings, actions,
+            risk acceptances, and questions. Newest first.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="px-0">
+            <AuditTable entries={history} />
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }
